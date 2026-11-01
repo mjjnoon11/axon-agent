@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<title>AXON AGENT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+:root{
+  --bg:#0b1f3a; --bg2:#102847; --bg3:#17345c; --line:rgba(212,169,55,.18);
+  --gold:#d4a937; --gold2:#f2cf6b; --ivory:#f4efe3; --mist:#9fb2cf;
+  --claude:#e08a62; --gpt:#3fbf91; --danger:#e06c6c;
+  --font:'Tajawal',system-ui,sans-serif; --mono:'IBM Plex Mono',ui-monospace,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ivory);font:16px/1.75 var(--font);display:flex;flex-direction:column;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0}
+:focus-visible{outline:2px solid var(--gold2);outline-offset:2px}
+[hidden]{display:none!important}
+
+/* header */
+header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:calc(env(safe-area-inset-top,0px) + 10px) max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));
+  border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:17px;color:var(--gold2)}
+.brand .name{letter-spacing:.14em}
+.pairdot{display:flex}
+.pairdot i{width:14px;height:14px;border-radius:50%;border:2px solid var(--bg)}
+.pairdot i:first-child{background:var(--claude)} .pairdot i:last-child{background:var(--gpt);margin-inline-start:-5px}
+.hbtns{display:flex;gap:4px}
+.icon{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--mist)}
+.icon:hover{background:var(--bg2);color:var(--ivory)}
+.icon svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+
+/* thread */
+#thread{flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain}
+.inner{max-width:860px;margin:0 auto;padding:18px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));display:grid;gap:18px}
+.welcome{display:grid;justify-items:center;text-align:center;gap:10px;padding:8vh 0 2vh}
+.welcome .orbs{transform:scale(.6);height:70px;margin-bottom:6px}
+.welcome h2{margin:0;font:800 30px/1.1 var(--font);letter-spacing:.12em;color:var(--gold2)}
+.welcome h3{margin:0;font-size:20px;font-weight:700;text-wrap:balance}
+.welcome p{margin:0;color:var(--mist);max-width:34ch}
+.sugs{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:10px}
+.sug{border:1px solid var(--line);border-radius:999px;padding:7px 14px;font-size:14px;background:var(--bg2)}
+.sug:hover{border-color:var(--gold)}
+
+.u{justify-self:start;max-width:85%;background:var(--bg3);border-radius:18px 18px 18px 6px;padding:9px 15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.u .via{display:block;font-size:11.5px;color:var(--mist)}
+.pair{display:grid;gap:12px}
+@media (min-width:900px){.pair{grid-template-columns:1fr 1fr;align-items:start}}
+.sep{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--mist);font-weight:700}
+.sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+.m{min-width:0;border-radius:14px;padding:10px 14px 8px;background:var(--bg2);border:1px solid var(--line);border-top:3px solid var(--c)}
+.m.claude{--c:var(--claude)} .m.gpt{--c:var(--gpt)}
+.m.note{background:transparent;border-top-width:1px;border-inline-start:3px solid var(--c)}
+.mh{display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:800}
+.mh i{width:9px;height:9px;border-radius:50%;background:var(--c)}
+.mh .k{font-weight:500;color:var(--mist);font-size:12px}
+.mb{overflow-wrap:anywhere;min-width:0}
+.mb>:first-child{margin-top:4px}.mb>:last-child{margin-bottom:4px}
+.mb p{margin:.45em 0}
+.mb ul,.mb ol{padding-inline-start:1.3em;margin:.4em 0}
+.mb pre{direction:ltr;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;overflow-x:auto;font:13.5px/1.55 var(--mono)}
+.mb code{font-family:var(--mono);font-size:.88em;background:rgba(255,255,255,.07);padding:1px 5px;border-radius:5px}
+.mb pre code{background:none;padding:0}
+.mb table{border-collapse:collapse;display:block;overflow-x:auto}
+.mb th,.mb td{border:1px solid var(--line);padding:5px 9px}
+.mb h1,.mb h2,.mb h3{font-size:1.05em;color:var(--gold2);margin:.8em 0 .3em}
+.mb a{color:var(--gold2)}
+.typing::after{content:"▍";color:var(--c);animation:blink 1s steps(2) infinite}
+.wait{display:flex;gap:4px;padding:8px 0}.wait i{width:7px;height:7px;border-radius:50%;background:var(--c);opacity:.4;animation:dot 1.2s infinite}
+.wait i:nth-child(2){animation-delay:.2s}.wait i:nth-child(3){animation-delay:.4s}
+@keyframes blink{50%{opacity:0}} @keyframes dot{40%{opacity:1}}
+.mf{display:flex;gap:4px;align-items:center;justify-content:flex-end;font-size:11.5px;color:var(--mist);font-variant-numeric:tabular-nums;min-height:26px}
+.mf .meta{margin-inline-end:auto}
+.mf button{color:var(--mist);border-radius:7px;padding:2px 7px;font-size:12.5px}
+.mf button:hover{background:var(--bg3);color:var(--ivory)}
+.mf button.on{color:var(--gold2)}
+.err{color:var(--danger);white-space:pre-wrap;font-size:14px}
+.cut .mb::after{content:" ✋";opacity:.7}
+
+/* composer */
+.dock{flex:0 0 auto;padding:8px max(12px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 10px) max(12px,env(safe-area-inset-left,0px))}
+.composer{max-width:860px;margin:0 auto;background:var(--bg2);border:1px solid var(--line);border-radius:22px;padding:8px 10px 8px 8px;transition:border-color .2s}
+.composer:focus-within{border-color:rgba(212,169,55,.55)}
+#input{width:100%;border:0;background:transparent;resize:none;max-height:180px;padding:6px 8px;line-height:1.6;outline:none;display:block}
+#input::placeholder{color:var(--mist)}
+.cbar{display:flex;align-items:center;gap:6px}
+.cbar .hint{flex:1;font-size:12px;color:var(--mist);padding-inline-start:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cbar .hint.live{color:var(--gold2)}
+.circle{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}
+.circle svg{width:21px;height:21px}
+#voiceBtn{background:var(--ivory);color:var(--bg)}
+#sendBtn{background:var(--gold);color:var(--bg)}
+#stopBtn{background:var(--ivory);color:var(--bg)}
+#dictBtn{color:var(--mist)} #dictBtn:hover{color:var(--ivory);background:var(--bg3)}
+#dictBtn.on{background:var(--danger);color:#fff}
+.circle svg.st{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.circle svg.fl{fill:currentColor}
+
+/* voice mode */
+.voice{position:fixed;inset:0;z-index:20;background:radial-gradient(120% 80% at 50% 30%,#14315a 0%,#081830 70%);display:flex;flex-direction:column;align-items:center;
+  padding:calc(env(safe-area-inset-top,0px) + 14px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 22px) max(16px,env(safe-area-inset-left,0px))}
+.vtop{width:100%;max-width:640px;display:flex;justify-content:space-between;align-items:center;color:var(--mist);font-size:14px}
+.vstage{flex:1;display:grid;place-items:center;align-content:center;gap:26px;width:100%;max-width:640px}
+.orbs{display:flex;gap:38px;align-items:center;justify-content:center;height:150px}
+.orb{--c:var(--claude);width:104px;height:104px;border-radius:50%;position:relative;
+  background:radial-gradient(circle at 35% 30%,color-mix(in srgb,var(--c) 85%,#fff) 0%,var(--c) 45%,color-mix(in srgb,var(--c) 55%,#000) 100%);
+  opacity:.45;transform:scale(.88);transition:opacity .3s,transform .3s}
+.orb.gpt{--c:var(--gpt)}
+.orb span{position:absolute;inset:auto 0 -30px;text-align:center;font-weight:700;font-size:14px;color:var(--ivory)}
+.orb.on{opacity:1;transform:scale(1.08);animation:breathe 1.6s ease-in-out infinite;box-shadow:0 0 50px color-mix(in srgb,var(--c) 55%,transparent)}
+.orb.think{opacity:.8;animation:think 1.4s ease-in-out infinite}
+@keyframes breathe{50%{transform:scale(1.18)}}
+@keyframes think{50%{transform:scale(.8);opacity:.55}}
+.you{width:62px;height:62px;border-radius:50%;border:2px solid rgba(242,207,107,.35);display:grid;place-items:center;color:var(--gold2);font-weight:800;transition:.3s}
+.you.on{border-color:var(--gold2);box-shadow:0 0 0 calc(4px + var(--lvl,0)*22px) rgba(242,207,107,.18);background:rgba(242,207,107,.08)}
+.vwho{font-weight:800;color:var(--gold2);min-height:26px;font-size:17px;text-align:center}
+.vcap{min-height:3.5em;max-width:34ch;text-align:center;font-size:18px;line-height:1.7;color:var(--ivory);opacity:.92;text-wrap:balance}
+.vbar{display:flex;gap:22px;align-items:center;justify-content:center}
+.vact{min-width:170px;height:58px;border-radius:999px;background:var(--ivory);color:var(--bg);font-weight:800;font-size:17px;padding:0 24px}
+.vend{width:58px;height:58px;border-radius:50%;background:var(--danger);color:#fff;display:grid;place-items:center}
+.vend svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.6;stroke-linecap:round}
+@media (prefers-reduced-motion:reduce){.orb.on,.orb.think,.typing::after,.wait i{animation:none}}
+
+/* settings */
+.scrim{position:fixed;inset:0;z-index:30;background:rgba(3,10,22,.6);display:flex;align-items:flex-end;justify-content:center}
+@media (min-width:700px){.scrim{align-items:center}}
+.sheet{width:100%;max-width:620px;max-height:88vh;overflow-y:auto;background:var(--bg2);border:1px solid var(--line);border-radius:20px 20px 0 0;
+  padding:16px max(18px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 18px) max(18px,env(safe-area-inset-left,0px));display:grid;gap:14px}
+@media (min-width:700px){.sheet{border-radius:20px}}
+.sheet h3{margin:0;font-size:18px;display:flex;justify-content:space-between;align-items:center}
+.sheet h4{margin:4px 0 0;font-size:14px;color:var(--gold2)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:520px){.g2{grid-template-columns:1fr}}
+.sheet label{display:grid;gap:4px;font-size:13px;color:var(--mist);min-width:0}
+.sheet input[type=text],.sheet input[type=password],.sheet select,.sheet textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;color:var(--ivory)}
+.ltr{direction:ltr;text-align:left;font-family:var(--mono);font-size:14px}
+.chk{display:flex!important;align-items:center;gap:8px;color:var(--ivory)!important;font-size:14px!important}
+.chk input{accent-color:var(--gold)}
+.note{font-size:12.5px;color:var(--mist);line-height:1.6;margin:0}
+.warnfile{color:var(--gold2);border:1px dashed var(--gold);border-radius:10px;padding:8px 12px}
+.testbtn{border:1px solid var(--gold);color:var(--gold2);border-radius:12px;padding:10px;font-weight:700}
+.testbtn:disabled{opacity:.6}
+.testres{display:grid;gap:6px;font-size:14px}
+.testres div{padding:8px 12px;border-radius:10px;background:var(--bg);border-inline-start:3px solid var(--danger);white-space:pre-wrap;overflow-wrap:anywhere}
+.testres div.ok{border-color:var(--gpt)}
+.done{background:var(--gold);color:var(--bg);border-radius:12px;padding:11px;font-weight:800}
+.toast{position:fixed;z-index:40;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 110px);transform:translateX(-50%);background:var(--bg3);border:1px solid var(--gold);
+  padding:8px 16px;border-radius:12px;font-size:14px;max-width:90vw;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="pairdot" aria-hidden="true"><i></i><i></i></span><span class="name" dir="ltr">AXON AGENT</span></div>
+  <div class="hbtns">
+    <button class="icon" id="newBtn" type="button" aria-label="محادثة جديدة" title="محادثة جديدة"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="icon" id="gearBtn" type="button" aria-label="الإعدادات" title="الإعدادات"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+</header>
+
+<main id="thread"><div class="inner" id="inner">
+  <section class="welcome" id="welcome">
+    <div class="orbs" aria-hidden="true"><div class="orb claude on"></div><div class="orb gpt on"></div></div>
+    <h2 dir="ltr" class="wname">AXON AGENT</h2>
+    <h3 class="wsub">اسأل Claude وChatGPT معاً</h3>
+    <p>يجيبان على سؤالك في نفس الوقت، ثم يقرأ كل واحد إجابة الآخر ويصحّحها. اكتب، أو اضغط زر الصوت وتحدّث معهما.</p>
+    <div class="sugs">
+      <button class="sug" type="button">ما أفضل طريقة لتعلّم البرمجة من الصفر؟</button>
+      <button class="sug" type="button">اشرح لي الفرق بين الذكاء الاصطناعي وتعلّم الآلة</button>
+      <button class="sug" type="button">ساعدني أخطط لرحلة عائلية يومين في العلا</button>
+    </div>
+  </section>
+</div></main>
+
+<div class="dock">
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="اكتب رسالتك للاثنين…" aria-label="الرسالة"></textarea>
+    <div class="cbar">
+      <span class="hint" id="hint" aria-live="polite"></span>
+      <button class="circle" id="dictBtn" type="button" aria-label="إملاء بالصوت" title="إملاء بالصوت"><svg class="st" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      <button class="circle" id="voiceBtn" type="button" aria-label="محادثة صوتية" title="محادثة صوتية"><svg class="st" viewBox="0 0 24 24"><path d="M4 10v4M8 7v10M12 4v16M16 7v10M20 10v4"/></svg></button>
+      <button class="circle" id="sendBtn" type="button" aria-label="إرسال" hidden><svg class="st" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button>
+      <button class="circle" id="stopBtn" type="button" aria-label="إيقاف" hidden><svg class="fl" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- voice conversation -->
+<section class="voice" id="voice" hidden aria-label="محادثة صوتية">
+  <div class="vtop"><span>محادثة صوتية مع الاثنين</span><span id="vRounds"></span></div>
+  <div class="vstage">
+    <div class="orbs"><div class="orb claude" id="orbC"><span>Claude</span></div><div class="orb gpt" id="orbG"><span>ChatGPT</span></div></div>
+    <div class="you" id="you">أنت</div>
+    <div class="vwho" id="vwho" aria-live="polite"></div>
+    <div class="vcap" id="vcap"></div>
+  </div>
+  <div class="vbar">
+    <button class="vact" id="vAct" type="button">🎙 تكلّم</button>
+    <button class="vend" id="vEnd" type="button" aria-label="إنهاء المحادثة الصوتية"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</section>
+
+<!-- settings -->
+<div class="scrim" id="settings" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="stitle">
+    <h3 id="stitle">الإعدادات <button class="icon" id="closeSet" type="button" aria-label="إغلاق"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></h3>
+    <p class="note" id="setNote" hidden style="color:var(--gold2)">أضف مفتاحي API للبدء. المفتاحان منفصلان عن اشتراكاتك وتُحاسب حسب الاستخدام.</p>
+    <h4>النموذجان</h4>
+    <div class="g2">
+      <label>مفتاح Claude <input type="password" id="keyC" class="ltr" placeholder="sk-ant-…" autocomplete="off"></label>
+      <label>مفتاح ChatGPT <input type="password" id="keyG" class="ltr" placeholder="sk-…" autocomplete="off"></label>
+      <label>نموذج Claude <input type="text" id="modelC" class="ltr" list="lC" value="claude-sonnet-5-5"><datalist id="lC"><option value="claude-fable-5-1"><option value="claude-opus-5-5"><option value="claude-sonnet-5-5"><option value="claude-haiku-5-5"></datalist></label>
+      <label>نموذج ChatGPT <input type="text" id="modelG" class="ltr" list="lG" value="gpt-5.5"><datalist id="lG"><option value="gpt-6.1-sol"><option value="gpt-6-sol"><option value="gpt-5.5"><option value="gpt-5.4-mini"></datalist></label>
+    </div>
+    <p class="note">المفتاح من console.anthropic.com و platform.openai.com. يُرسل من جهازك إليهما مباشرة فقط.</p>
+    <label class="chk"><input type="checkbox" id="remember"> احفظ المفاتيح في هذا المتصفح</label>
+    <p class="note warnfile" id="fileWarn" hidden>تنبيه: الصفحة مفتوحة كملف من جهازك. ChatGPT يرفض الاتصال من الملفات المحلية، فافتحها من رابطها المنشور حتى يعمل الاثنان.</p>
+    <button class="testbtn" id="testBtn" type="button">فحص الاتصال</button>
+    <div class="testres" id="testRes" aria-live="polite" hidden></div>
+    <h4>طريقة التعاون</h4>
+    <div class="g2">
+      <label>جولات التعقيب بعد كل إجابة
+        <select id="rounds"><option value="0">بدون تعقيب</option><option value="1" selected>جولة واحدة</option><option value="2">جولتان (نقاش)</option></select>
+      </label>
+      <label>تعليمات إضافية لهما (اختياري) <input type="text" id="extra" placeholder="مثال: أنا مبرمج، تكلّما بتفاصيل تقنية"></label>
+    </div>
+    <h4>الصوت</h4>
+    <div class="g2">
+      <label>الاستماع لكلامك <select id="sttEngine"><option value="browser">المتصفح · مجاني</option><option value="openai">OpenAI · أدق للهجة</option></select></label>
+      <label>نطق الإجابات <select id="ttsEngine"><option value="browser">المتصفح · مجاني</option><option value="openai">OpenAI · صوت طبيعي</option></select></label>
+      <label>صوت Claude <select id="voiceC" class="ltr"><option>onyx</option><option>ash</option><option>echo</option><option>sage</option><option>fable</option><option>alloy</option><option>coral</option><option>nova</option><option>shimmer</option></select></label>
+      <label>صوت ChatGPT <select id="voiceG" class="ltr"><option>nova</option><option>shimmer</option><option>coral</option><option>alloy</option><option>sage</option><option>onyx</option><option>ash</option><option>echo</option><option>fable</option></select></label>
+      <label>سرعة الكلام <select id="rate"><option value="0.9">هادئة</option><option value="1" selected>عادية</option><option value="1.15">سريعة</option><option value="1.3">أسرع</option></select></label>
+      <label>نماذج الصوت (OpenAI) <input type="text" id="ttsModel" class="ltr" value="gpt-4o-mini-tts" aria-label="نموذج النطق"></label>
+      <label>نموذج الاستماع (OpenAI) <input type="text" id="sttModel" class="ltr" value="gpt-4o-transcribe"></label>
+    </div>
+    <label class="chk"><input type="checkbox" id="autoBarge"> قاطِعهما بصوتك أثناء كلامهما (استخدم سماعات)</label>
+    <p class="note">صوت OpenAI يستخدم مفتاح ChatGPT. صوت المتصفح مجاني ويعمل أفضل في Chrome وSafari.</p>
+    <button class="done" id="saveSet" type="button">تم</button>
+  </div>
+</div>
+
+<script>
+/* ===== Core: streaming, providers, speech helpers (pure, unit-tested) ===== */
+const Core = (() => {
+  async function* sse(response){
+    const reader = response.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    while(true){
+      const {value, done} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      let i;
+      while((i = buf.search(/\r?\n\r?\n/)) !== -1){
+        const raw = buf.slice(0, i); buf = buf.slice(i).replace(/^\r?\n\r?\n/, '');
+        const data = raw.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trimStart()).join('\n');
+        if(data) yield data;
+      }
+    }
+    const rest = buf.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trimStart()).join('\n');
+    if(rest) yield rest;
+  }
+  async function readError(res){
+    let t = ''; try{ t = await res.text(); }catch(e){}
+    try{ const j = JSON.parse(t); return (j.error && (j.error.message || j.error.type)) || t; }catch(e){ return t || res.statusText; }
+  }
+  function friendly(provider, status, msg){
+    const name = provider === 'claude' ? 'Claude' : 'ChatGPT';
+    if(status === 401) return `${name}: المفتاح غير صحيح. تأكد منه في الإعدادات.`;
+    if(status === 403) return `${name}: المفتاح لا يملك صلاحية لهذا النموذج.\n${msg}`;
+    if(status === 404) return `${name}: اسم النموذج غير موجود. غيّره في الإعدادات.\n${msg}`;
+    if(status === 429) return `${name}: تجاوزت حد الاستخدام أو نفد الرصيد. انتظر قليلاً أو اشحن الحساب.\n${msg}`;
+    if(status >= 500) return `${name}: الخدمة مشغولة حالياً، حاول بعد قليل.\n${msg}`;
+    return `${name} (${status}): ${msg}`;
+  }
+  async function claude({key, model, system, messages, maxTokens, onText, signal, fetchImpl = fetch}){
+    const body = {model, max_tokens: maxTokens, stream: true, messages};
+    if(system) body.system = system;
+    const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
+      method:'POST', signal,
+      headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify(body)
+    });
+    if(!res.ok) throw new Error(friendly('claude', res.status, await readError(res)));
+    let text = '', usage = {in:0,out:0};
+    for await (const d of sse(res)){
+      let ev; try{ ev = JSON.parse(d); }catch(e){ continue; }
+      if(ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta'){ text += ev.delta.text; onText && onText(text); }
+      else if(ev.type === 'message_start' && ev.message && ev.message.usage){ usage.in = ev.message.usage.input_tokens || 0; }
+      else if(ev.type === 'message_delta' && ev.usage){ usage.out = ev.usage.output_tokens || usage.out; }
+      else if(ev.type === 'error'){ throw new Error('Claude: ' + ((ev.error && ev.error.message) || 'خطأ أثناء البث')); }
+    }
+    return {text, usage};
+  }
+  async function gpt({key, model, system, messages, maxTokens, onText, signal, fetchImpl = fetch}){
+    const msgs = system ? [{role:'system', content: system}, ...messages] : messages;
+    const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+      method:'POST', signal,
+      headers:{'content-type':'application/json','authorization':'Bearer ' + key},
+      body: JSON.stringify({model, messages: msgs, stream: true, max_completion_tokens: maxTokens, stream_options:{include_usage:true}})
+    });
+    if(!res.ok) throw new Error(friendly('gpt', res.status, await readError(res)));
+    let text = '', usage = {in:0,out:0};
+    for await (const d of sse(res)){
+      if(d === '[DONE]') break;
+      let ev; try{ ev = JSON.parse(d); }catch(e){ continue; }
+      if(ev.error) throw new Error('ChatGPT: ' + (ev.error.message || 'خطأ أثناء البث'));
+      const c = ev.choices && ev.choices[0] && ev.choices[0].delta && ev.choices[0].delta.content;
+      if(c){ text += c; onText && onText(text); }
+      if(ev.usage){ usage.in = ev.usage.prompt_tokens || 0; usage.out = ev.usage.completion_tokens || 0; }
+    }
+    return {text, usage};
+  }
+  function speechText(t){
+    return String(t || '')
+      .replace(/```[\s\S]*?```/g, ' (مقطع برمجي) ')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/https?:\/\/\S+/g, 'رابط')
+      .replace(/^\s*\|?\s*:?-{3,}.*$/gm, '')
+      .replace(/^#{1,6}\s*/gm, '')
+      .replace(/^\s*(?:[-*•]|\d+[.)])\s+/gm, '')
+      .replace(/[*_>|~#]/g, ' ')
+      .replace(/\n+/g, '. ')
+      .replace(/\.\s*\./g, '.')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function chunk(t, max){
+    const parts = t.match(/[^.!?؟،\n]+[.!?؟،]*\s*/g) || [t];
+    const out = []; let cur = '';
+    for(let p of parts){
+      while(p.length > max){ if(cur){ out.push(cur.trim()); cur = ''; } out.push(p.slice(0, max)); p = p.slice(max); }
+      if((cur + p).length > max){ out.push(cur.trim()); cur = p; } else cur += p;
+    }
+    if(cur.trim()) out.push(cur.trim());
+    return out.filter(Boolean);
+  }
+  async function tts({key, model, voice, input, speed, fetchImpl = fetch}){
+    const res = await fetchImpl('https://api.openai.com/v1/audio/speech', {
+      method:'POST', headers:{'content-type':'application/json','authorization':'Bearer ' + key},
+      body: JSON.stringify({model, voice, input, speed, response_format:'mp3'})
+    });
+    if(!res.ok) throw new Error(friendly('gpt', res.status, await readError(res)));
+    return await res.blob();
+  }
+  async function stt({key, model, blob, fetchImpl = fetch}){
+    const fd = new FormData();
+    const ext = (blob.type.includes('mp4') || blob.type.includes('m4a')) ? 'm4a' : (blob.type.includes('ogg') ? 'ogg' : 'webm');
+    fd.append('file', blob, 'speech.' + ext);
+    fd.append('model', model);
+    fd.append('language', 'ar');
+    const res = await fetchImpl('https://api.openai.com/v1/audio/transcriptions', {method:'POST', headers:{'authorization':'Bearer ' + key}, body: fd});
+    if(!res.ok) throw new Error(friendly('gpt', res.status, await readError(res)));
+    const j = await res.json();
+    return (j.text || '').trim();
+  }
+  /* which model was named first in the message, if any */
+  function addressed(txt){
+    const c = txt.search(/claude|كلود|كلاود/i), g = txt.search(/gpt|شات|تشات|جي ?بي ?تي/i);
+    if(c >= 0 && (g < 0 || c < g)) return 'claude';
+    if(g >= 0) return 'gpt';
+    return null;
+  }
+  const NOCOMMENT = /^\s*\[?\s*لا تعقيب\s*\]?\s*\.?\s*$/;
+  /* free check: list the models a key can use (no tokens spent) */
+  async function check(provider, key, model, fetchImpl = fetch){
+    const name = provider === 'claude' ? 'Claude' : 'ChatGPT';
+    if(!key) return {ok: false, msg: `${name}: لم يُضف المفتاح بعد.`};
+    /* Anthropic's model list refuses browser requests; token counting is free and checks key + model together */
+    const req = provider === 'claude'
+      ? ['https://api.anthropic.com/v1/messages/count_tokens', {method: 'POST',
+          headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
+          body: JSON.stringify({model, messages: [{role: 'user', content: 'مرحبا'}]})}]
+      : ['https://api.openai.com/v1/models', {headers: {'authorization': 'Bearer ' + key}}];
+    let res;
+    try{ res = await fetchImpl(...req); }
+    catch(e){
+      if(/headers|ISO-8859|code point/i.test(String(e && e.message))) return {ok: false, msg: `${name}: المفتاح يحتوي رموزاً غير صالحة. احذفه والصقه من جديد.`};
+      return {ok: false, msg: `${name}: تعذّر الاتصال بالخادم. افتح الصفحة في Safari أو Chrome وتأكد من الإنترنت.`};
+    }
+    if(!res.ok){
+      const em = await readError(res);
+      if(provider === 'claude' && (res.status === 404 || (res.status === 400 && /model/i.test(em))))
+        return {ok: false, keyOk: true, msg: `${name}: المفتاح يعمل ✓ لكن النموذج «${model}» غير متاح لحسابك. جرّب: claude-sonnet-5-5 أو claude-haiku-5-5`};
+      return {ok: false, msg: friendly(provider, res.status, em)};
+    }
+    if(provider === 'claude') return {ok: true, msg: `${name}: المفتاح يعمل ✓ والنموذج «${model}» متاح.`};
+    let ids = [];
+    try{ const j = await res.json(); ids = (j.data || []).map(m => m.id); }catch(e){}
+    if(model && ids.length && !ids.includes(model)){
+      const near = ids.filter(id => provider === 'claude' ? /^claude-/.test(id) : /^gpt-/.test(id)).slice(0, 4).join('، ');
+      return {ok: false, keyOk: true, msg: `${name}: المفتاح يعمل ✓ لكن النموذج «${model}» غير متاح لحسابك.${near ? ' جرّب: ' + near : ''}`};
+    }
+    return {ok: true, msg: `${name}: المفتاح يعمل ✓ والنموذج «${model}» متاح.`};
+  }
+  return {sse, claude, gpt, friendly, speechText, chunk, tts, stt, addressed, NOCOMMENT, check};
+})();
+if(typeof module !== 'undefined') module.exports = Core;
+
+/* ===== App ===== */
+if(typeof document !== 'undefined') (function(){
+const $ = id => document.getElementById(id);
+const NAME = {claude:'Claude', gpt:'ChatGPT'};
+const other = p => p === 'claude' ? 'gpt' : 'claude';
+const store = {
+  get(k){ try{ return localStorage.getItem('thunai2.' + k); }catch(e){ return null; } },
+  set(k, v){ try{ v == null ? localStorage.removeItem('thunai2.' + k) : localStorage.setItem('thunai2.' + k, v); }catch(e){} }
+};
+const synth = window.speechSynthesis;
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+/* ---------- settings ---------- */
+const FIELDS = ['modelC','modelG','rounds','extra','sttEngine','ttsEngine','voiceC','voiceG','rate','ttsModel','sttModel'];
+FIELDS.forEach(f => { const v = store.get(f); if(v != null) $(f).value = v; $(f).addEventListener('change', () => store.set(f, $(f).value)); });
+if(store.get('autoBarge') === '1') $('autoBarge').checked = true;
+$('autoBarge').addEventListener('change', () => store.set('autoBarge', $('autoBarge').checked ? '1' : null));
+if(store.get('remember') === '1'){ $('remember').checked = true; $('keyC').value = store.get('keyC') || ''; $('keyG').value = store.get('keyG') || ''; }
+/* keys pasted in RTL interfaces often carry invisible direction marks or spaces; keep only visible ASCII */
+const cleanKey = v => String(v || '').replace(/[^\x21-\x7E]/g, '');
+['keyC','keyG'].forEach(id => { const v = $(id).value; if(cleanKey(v) !== v) $(id).value = cleanKey(v); });
+function saveKeys(){
+  ['keyC','keyG'].forEach(id => { const v = $(id).value, c = cleanKey(v); if(c !== v) $(id).value = c; });
+  store.set('remember', $('remember').checked ? '1' : null);
+  ['keyC','keyG'].forEach(k => store.set(k, $('remember').checked ? $(k).value.trim() : null));
+}
+['keyC','keyG','remember'].forEach(id => $(id).addEventListener('input', saveKeys));
+const hasKeys = () => !!($('keyC').value.trim() && $('keyG').value.trim());
+function openSettings(needKeys){ $('setNote').hidden = !needKeys; $('settings').hidden = false; setTimeout(() => (needKeys && !$('keyC').value ? $('keyC') : $('saveSet')).focus(), 50); }
+function closeSettings(){ $('settings').hidden = true; }
+$('gearBtn').onclick = () => openSettings(false);
+$('closeSet').onclick = $('saveSet').onclick = closeSettings;
+$('settings').addEventListener('click', e => { if(e.target === $('settings')) closeSettings(); });
+addEventListener('keydown', e => { if(e.key === 'Escape' && !$('settings').hidden) closeSettings(); });
+const localFile = location.protocol === 'file:' || location.origin === 'null';
+$('fileWarn').hidden = !localFile;
+$('testBtn').onclick = async () => {
+  const b = $('testBtn'), box = $('testRes');
+  b.disabled = true; b.textContent = 'جارٍ الفحص…'; box.hidden = false; box.innerHTML = '';
+  const res = await Promise.all([
+    Core.check('claude', $('keyC').value.trim(), $('modelC').value.trim()),
+    Core.check('gpt', $('keyG').value.trim(), $('modelG').value.trim())
+  ]);
+  res.forEach(r => { const d = document.createElement('div'); d.className = r.ok ? 'ok' : ''; d.textContent = r.msg; box.appendChild(d); });
+  const d = document.createElement('div');
+  if(res.every(r => r.ok)){ d.className = 'ok'; d.textContent = 'كل شيء جاهز. اضغط «تم» وابدأ المحادثة.'; }
+  else d.textContent = 'صحّح ما سبق ثم اضغط «فحص الاتصال» مرة أخرى.';
+  box.appendChild(d);
+  b.disabled = false; b.textContent = 'فحص الاتصال';
+};
+function cfg(p){
+  return p === 'claude'
+    ? {fn: Core.claude, key: $('keyC').value.trim(), model: $('modelC').value.trim()}
+    : {fn: Core.gpt, key: $('keyG').value.trim(), model: $('modelG').value.trim()};
+}
+function toast(msg, ms = 3500){
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
+  setTimeout(() => t.remove(), ms);
+}
+
+/* ---------- conversation state ---------- */
+let transcript = [];        // {who:'user'|'claude'|'gpt', kind:'ask'|'answer'|'note', text, sp?, view?}
+let gen = 0, ctl = null, busy = false, lastFirst = 'gpt';
+let voiceOn = false;
+
+/* ---------- thread rendering ---------- */
+const inner = $('inner'), thread = $('thread');
+const md = t => (window.marked && window.DOMPurify) ? DOMPurify.sanitize(marked.parse(t)) : null;
+let stick = true;
+thread.addEventListener('scroll', () => { stick = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 80; });
+const toBottom = () => { if(stick) thread.scrollTop = thread.scrollHeight; };
+function addUser(text, viaVoice){
+  $('welcome').hidden = true;
+  const el = document.createElement('div'); el.className = 'u';
+  el.textContent = text;
+  if(viaVoice){ const s = document.createElement('span'); s.className = 'via'; s.textContent = '🎙 بالصوت'; el.prepend(s); }
+  inner.appendChild(el); stick = true; toBottom();
+}
+function addBlock(cls){ const el = document.createElement('div'); el.className = cls; inner.appendChild(el); return el; }
+function addSep(txt){ const s = addBlock('sep'); s.textContent = txt; return s; }
+function addCard(parent, p, kind){
+  const el = document.createElement('article'); el.className = 'm ' + p + (kind === 'note' ? ' note' : '');
+  el.innerHTML = `<div class="mh"><i></i>${NAME[p]}${kind === 'note' ? '<span class="k">· تعقيب</span>' : ''}</div><div class="mb"><div class="wait"><i></i><i></i><i></i></div></div><div class="mf" hidden><span class="meta"></span><button type="button" data-a="spk" aria-label="استمع">🔊</button><button type="button" data-a="cp">نسخ</button></div>`;
+  parent.appendChild(el);
+  const body = el.querySelector('.mb'), foot = el.querySelector('.mf');
+  let raw = '', pending = false;
+  const paint = () => { pending = false; const h = md(raw); if(h != null) body.innerHTML = h; else body.textContent = raw; toBottom(); };
+  const view = {
+    get text(){ return raw; },
+    update(t){ raw = t; body.classList.add('typing'); if(!pending){ pending = true; requestAnimationFrame(paint); } },
+    done(meta){ body.classList.remove('typing'); paint(); foot.hidden = false; foot.querySelector('.meta').textContent = meta || ''; },
+    fail(msg){ body.classList.remove('typing'); body.innerHTML = ''; const d = document.createElement('div'); d.className = 'err'; d.textContent = msg; body.appendChild(d); },
+    cut(t){ if(t != null) raw = t; body.classList.remove('typing'); paint(); el.classList.add('cut'); foot.hidden = false; },
+    drop(){ el.remove(); }
+  };
+  foot.addEventListener('click', async e => {
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.a === 'cp'){
+      try{ await navigator.clipboard.writeText(raw); b.textContent = 'تم'; }
+      catch(_){ const r = document.createRange(); r.selectNodeContents(body); const s = getSelection(); s.removeAllRanges(); s.addRange(r); b.textContent = 'محدد'; }
+      setTimeout(() => b.textContent = 'نسخ', 1300);
+    } else {
+      if(b.classList.contains('on')){ Speech.stopAll(); return; }
+      if(busy){ toast('انتظر حتى ينتهيا من الرد'); return; }
+      Speech.stopAll(); Speech.unlock();
+      const g = gen;
+      const sp = Speech.speaker(p, Promise.resolve(), () => g === gen);
+      b.classList.add('on'); sp.end(raw); sp.done.then(() => b.classList.remove('on'));
+    }
+  });
+  return view;
+}
+
+/* ---------- prompts ---------- */
+function systemFor(p, voice){
+  const o = NAME[other(p)];
+  let s = `أنت ${NAME[p]}. تعمل مع ${o} (نموذج ذكاء اصطناعي من شركة أخرى) كفريق واحد يخدم المستخدم.
+كل رسالة من المستخدم تصل إليكما معاً في نفس اللحظة، فيجيب كل منكما مستقلاً، ثم يقرأ كل منكما إجابة الآخر ويعقّب عليها ليصحّح ويكمّل.
+الهدف أن يحصل المستخدم على أدق وأنفع إجابة، لا أن يفوز أحد. كن صريحاً ولطيفاً: إذا أخطأ ${o} صحّحه بوضوح، وإذا أخطأت أنت فاعترف.`;
+  s += voice
+    ? `\nهذه محادثة صوتية: كلامك يتحول إلى صوت مباشرة. تكلّم بجمل قصيرة طبيعية كأنك في مجلس، غالباً من جملتين إلى خمس جمل، بلا قوائم ولا رموز ولا عناوين ولا روابط. استخدم العربية الفصحى المبسّطة القريبة من لهجة أهل السعودية. يمكنك مخاطبة المستخدم أو ${o} بالاسم.`
+    : `\nاكتب بالعربية بوضوح، واستخدم Markdown عند الحاجة.`;
+  const extra = $('extra').value.trim();
+  if(extra) s += '\nتعليمات المستخدم: ' + extra;
+  return s;
+}
+function logText(){
+  const lines = transcript.slice(-40).map(e => {
+    if(e.who === 'user') return `المستخدم: ${e.text}`;
+    return `${NAME[e.who]} (${e.kind === 'note' ? 'تعقيب' : 'إجابة'}): ${e.text}`;
+  });
+  return 'سجل المحادثة:\n' + lines.join('\n\n');
+}
+function taskFor(p, kind, round, voice){
+  const o = NAME[other(p)];
+  if(kind === 'answer')
+    return `${logText()}\n\nالمهمة: أجب على آخر رسالة من المستخدم. ${o} يجيب عليها الآن بشكل مستقل، وستقرأ إجابته بعد قليل، فلا تشر إليه الآن.`;
+  if(round === 1)
+    return `${logText()}\n\nالمهمة: اقرأ إجابة ${o} الأخيرة وعقّب عليها باختصار ${voice ? '(جملتان إلى أربع جمل)' : '(فقرة قصيرة أو نقاط قليلة)'}: صحّح أي خطأ، وأضف أهم ما نقص، ونبّه إن وجدت خطأ في إجابتك أنت. لا تُعِد إجابتك.
+إذا كانت رسالة المستخدم تحية أو سؤالاً بسيطاً، أو كانت إجابة ${o} صحيحة وكاملة ولا تضيف عليها شيئاً مهماً، فاكتب فقط: [لا تعقيب]`;
+  return `${logText()}\n\nالمهمة: رد باختصار على تعقيب ${o} الأخير. إن اتفقتما فاختم بخلاصة مشتركة في جملة واحدة. وإن لم يكن هناك ما يستحق الرد فاكتب فقط: [لا تعقيب]`;
+}
+
+/* ---------- speech output ---------- */
+const Speech = (() => {
+  let arVoice = null, curAudio = null, curEnd = null, token = 0, warnedVoice = false;
+  /* one reusable element: iOS only lets audio play on an element first started from a tap */
+  const player = new Audio(); player.preload = 'auto';
+  const SILENT = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//tQxAADB8AhSmxhIIEVCSiJrDCQBTcu3UrAIwUdkRgQbFAZC1CQEwTJ9mjRvBA4UOLD8nKVOWfh+UlK3z/177OXrfOdKl7pyn3Xf//WreyTRUoAWgBgkOAGbZHBgG1OF6zM82DWbZaUmMBptgQhGjsyYqc9ae9XFz280948NMBWInljyzsNRFLPWdnZGWrddDsjK1unuSrVN9jJsK8KuQtQCtMBjCEtImISdNKJOopIpBFpNSMbIHCSRpRR5iakjTiyzLhchUUBwCgyKiweBv/7UsQbg8isVNoMPMjAAAA0gAAABEVFGmgqK////9bP/6XCykxBTUUzLjEwMKqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
+  function primePlayer(){ try{ player.src = SILENT; const pr = player.play(); if(pr) pr.catch(() => {}); }catch(e){} }
+  const pick = () => { if(!synth) return; const vs = synth.getVoices(); arVoice = vs.find(v => /^ar[-_]SA/i.test(v.lang)) || vs.find(v => /^ar/i.test(v.lang)) || null; };
+  if(synth){ pick(); if(synth.addEventListener) synth.addEventListener('voiceschanged', pick); }
+  const useAI = () => {
+    const key = !!$('keyG').value.trim();
+    if($('ttsEngine').value === 'openai') return key;
+    const noArabic = !synth || (synth.getVoices().length > 0 && !arVoice);
+    if(noArabic && key){
+      if(!warnedVoice){ warnedVoice = true; toast('متصفحك لا يحتوي صوتاً عربياً، فاستخدمت صوت OpenAI تلقائياً.', 4500); }
+      return true;
+    }
+    if(noArabic && !warnedVoice){ warnedVoice = true; toast('متصفحك لا يحتوي صوتاً عربياً. اختر صوت OpenAI من الإعدادات لنطق أوضح.', 5000); }
+    return false;
+  };
+  function play(it, p, alive){
+    if(it.blob){
+      return it.blob.then(blob => new Promise(res => {
+        if(!alive()) return res();
+        const url = URL.createObjectURL(blob), a = player; curAudio = a;
+        let fin = false;
+        const end = () => { if(fin) return; fin = true; a.onended = a.onerror = null; URL.revokeObjectURL(url); if(curAudio === a){ curAudio = null; curEnd = null; } res(); };
+        a.onended = end; a.onerror = end; curEnd = end;
+        a.src = url;
+        const pr = a.play(); if(pr) pr.catch(end);
+      }));
+    }
+    return new Promise((res, rej) => {
+      if(!synth) return rej(new Error('المتصفح لا يدعم النطق، اختر صوت OpenAI من الإعدادات'));
+      const parts = Core.chunk(it.s, 180); let i = 0, timer = 0;
+      const go = () => {
+        clearTimeout(timer);
+        if(i >= parts.length || !alive()) return res();
+        const u = new SpeechSynthesisUtterance(parts[i++]);
+        u.lang = arVoice ? arVoice.lang : 'ar-SA'; if(arVoice) u.voice = arVoice;
+        u.rate = +$('rate').value || 1; u.pitch = p === 'gpt' ? 1.15 : 0.85;
+        u.onend = go; u.onerror = go;
+        timer = setTimeout(go, 4000 + u.text.length * 140);
+        synth.speak(u);
+      };
+      go();
+    });
+  }
+  /* a speaker plays one message sentence by sentence, starting while the text still streams,
+     and only after `after` (the previous speaker) has finished */
+  function speaker(p, after, isAlive, hooks = {}){
+    const myTok = token, alive = () => myTok === token && isAlive();
+    const q = []; let fed = 0, ended = false, playing = false, started = false, resolve;
+    const sp = {spoken: '', current: '', complete: false, done: new Promise(r => resolve = r)};
+    const ai = useAI(), voice = p === 'gpt' ? $('voiceG').value : $('voiceC').value;
+    function push(seg){
+      const s = Core.speechText(seg); if(!s) return;
+      const it = {raw: seg, s};
+      if(ai){ it.blob = Core.tts({key: $('keyG').value.trim(), model: $('ttsModel').value.trim(), voice, input: s, speed: +$('rate').value || 1}); it.blob.catch(() => {}); }
+      q.push(it); kick();
+    }
+    sp.feed = full => {
+      const m = full.slice(fed).match(/^[\s\S]*[.!?؟\n]/);
+      if(m && m[0].trim().length >= 40){ fed += m[0].length; push(m[0]); }
+    };
+    sp.end = full => { if(full.length > fed) push(full.slice(fed)); fed = full.length; ended = true; kick(); };
+    sp.cancel = () => { ended = true; q.length = 0; kick(); };
+    async function kick(){
+      if(playing) return; playing = true;
+      if(!started){ await after; started = true; }
+      while(q.length && alive()){
+        const it = q.shift();
+        sp.current = it.raw;
+        hooks.onSay && hooks.onSay(it.s);
+        try{ await play(it, p, alive); }catch(e){ hooks.onError && hooks.onError(e); }
+        if(alive()){ sp.spoken += it.raw; sp.current = ''; }
+      }
+      playing = false;
+      if(!alive()){ resolve(); return; }
+      if(ended && !q.length){ sp.complete = true; hooks.onDone && hooks.onDone(); resolve(); }
+    }
+    return sp;
+  }
+  function stopAll(){ token++; if(synth) synth.cancel(); try{ player.pause(); }catch(e){} if(curEnd){ const f = curEnd; curEnd = null; f(); } curAudio = null; document.querySelectorAll('.mf button.on').forEach(b => b.classList.remove('on')); }
+  function unlock(){ primePlayer(); if(synth){ try{ synth.speak(new SpeechSynthesisUtterance(' ')); }catch(e){} } }
+  return {speaker, stopAll, unlock};
+})();
+
+/* ---------- speech input ---------- */
+const Ear = (() => {
+  let rec = null, media = null, mic = null;
+  async function openMic(){
+    if(mic) return mic;
+    if(!navigator.mediaDevices) return null;
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+      const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), an = ac.createAnalyser();
+      an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
+      const buf = new Uint8Array(an.fftSize);
+      mic = {stream, ac, level(){ an.getByteTimeDomainData(buf); let s = 0; for(let i = 0; i < buf.length; i++){ const d = (buf[i] - 128) / 128; s += d * d; } return Math.sqrt(s / buf.length); }};
+      return mic;
+    }catch(e){ return null; }
+  }
+  function closeMic(){ if(mic){ mic.stream.getTracks().forEach(t => t.stop()); mic.ac.close().catch(() => {}); mic = null; } }
+  const level = () => mic ? mic.level() : 0;
+  /* listen to one utterance; resolves with text ('' if nothing / cancelled) */
+  async function once({onInterim, onLevel, alive}){
+    if($('sttEngine').value === 'openai' && $('keyG').value.trim()){
+      const m = await openMic();
+      if(!m) throw new Error('اسمح للمتصفح باستخدام الميكروفون.');
+      return recordOpenAI(m, onLevel, alive);
+    }
+    if(!SR) throw new Error('هذا المتصفح لا يدعم التعرّف على الكلام. استخدم Chrome أو اختر OpenAI من الإعدادات.');
+    return new Promise((res, rej) => {
+      const r = new SR(); r.lang = 'ar-SA'; r.interimResults = true; r.continuous = false;
+      let fin = '', fatal = null;
+      r.onresult = e => {
+        let interim = '';
+        for(let i = e.resultIndex; i < e.results.length; i++){
+          if(e.results[i].isFinal) fin += e.results[i][0].transcript; else interim += e.results[i][0].transcript;
+        }
+        onInterim && onInterim(fin + interim);
+      };
+      r.onerror = e => {
+        if(e.error === 'not-allowed' || e.error === 'service-not-allowed') fatal = 'اسمح للمتصفح باستخدام الميكروفون.';
+        else if(e.error === 'network') fatal = 'الاستماع في المتصفح يحتاج إنترنت. جرّب OpenAI من الإعدادات.';
+      };
+      r.onend = () => { if(rec === r) rec = null; if(fatal) rej(new Error(fatal)); else res(alive() ? fin.trim() : ''); };
+      rec = r;
+      try{ r.start(); }catch(e){ rec = null; res(''); }
+    });
+  }
+  function recordOpenAI(m, onLevel, alive){
+    return new Promise(res => {
+      const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
+      let mr; try{ mr = new MediaRecorder(m.stream, mime ? {mimeType: mime} : undefined); }catch(e){ return res(''); }
+      const chunks = []; mr.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
+      let spoke = false, lastLoud = performance.now(); const t0 = performance.now();
+      const iv = setInterval(() => {
+        const l = m.level(), now = performance.now();
+        onLevel && onLevel(Math.min(1, l * 8));
+        if(l > 0.035){ spoke = true; lastLoud = now; }
+        if(!alive() || (spoke && now - lastLoud > 1500) || now - t0 > 60000 || (!spoke && now - t0 > 9000)){ clearInterval(iv); if(mr.state !== 'inactive') mr.stop(); }
+      }, 60);
+      mr.onstop = async () => {
+        clearInterval(iv); media = null; onLevel && onLevel(0);
+        if(!alive() || !spoke || !chunks.length) return res('');
+        try{ res(await Core.stt({key: $('keyG').value.trim(), model: $('sttModel').value.trim(), blob: new Blob(chunks, {type: mr.mimeType || 'audio/webm'})})); }
+        catch(e){ toast(e.message); res(''); }
+      };
+      media = mr; mr.start(250);
+    });
+  }
+  /* finish listening now: keep what was heard */
+  function finish(){ if(rec){ try{ rec.stop(); }catch(e){} } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
+  /* cancel listening: discard */
+  function cancel(){ if(rec){ try{ rec.abort ? rec.abort() : rec.stop(); }catch(e){} rec = null; } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
+  return {once, finish, cancel, openMic, closeMic, level};
+})();
+
+/* network failures surface as a bare TypeError; explain the likely cause */
+function netMessage(e, p){
+  const m = String(e && e.message || e);
+  if(e instanceof TypeError || /failed to fetch|load failed|networkerror|network request failed/i.test(m)){
+    const embedded = window.top !== window.self;
+    if(p === 'gpt' && (location.protocol === 'file:' || location.origin === 'null'))
+      return 'ChatGPT: يرفض الاتصال من ملف مفتوح على الجهاز. افتح AXON AGENT من رابطه المنشور.';
+    return `${NAME[p]}: تعذّر الاتصال بالخادم.\n` + (embedded
+      ? 'يبدو أن الملف مفتوح داخل معاينة تطبيق تمنع الاتصال. افتحه مباشرة في Safari أو Chrome.'
+      : 'تأكد من الإنترنت. إذا كان الملف مفتوحاً داخل معاينة تطبيق (مثل تطبيق الملفات أو Claude) فافتحه في Safari أو Chrome.');
+  }
+  return m;
+}
+
+/* ---------- one exchange: both answer in parallel, then comment on each other ---------- */
+async function generate(p, kind, round, parent, voice, myGen, sp){
+  const view = addCard(parent, p, kind);
+  const {fn, key, model} = cfg(p);
+  const t0 = performance.now();
+  const alive = () => myGen === gen;
+  try{
+    const r = await fn({key, model, system: systemFor(p, voice), maxTokens: voice ? 700 : (kind === 'note' ? 900 : 3000),
+      messages: [{role: 'user', content: taskFor(p, kind, round, voice)}], signal: ctl.signal,
+      onText: t => { if(!alive()) return; if(kind === 'note' && /^\s*\[?\s*لا\s*ت?ع?ق?/.test(t) && t.length < 14) return; view.update(t); sp && sp.feed(t); }});
+    if(!alive()) throw Object.assign(new Error('cut'), {name: 'AbortError'});
+    const text = r.text.trim();
+    if(kind === 'note' && (Core.NOCOMMENT.test(text) || !text)){ view.drop(); sp && sp.cancel(); return null; }
+    view.done(`${((performance.now() - t0) / 1000).toFixed(1)}ث`);
+    sp && sp.end(text);
+    const entry = {who: p, kind, text, sp, view};
+    transcript.push(entry);
+    return entry;
+  }catch(e){
+    if(e.name === 'AbortError' || !alive()){
+      const said = sp ? (sp.spoken + sp.current).trim() : '';
+      const partial = voice ? said : view.text.trim();
+      if(partial){
+        const entry = {who: p, kind, text: partial + ' … (قاطعه المستخدم)', view};
+        view.cut(partial + ' …'); transcript.push(entry); return null;
+      }
+      view.drop(); return null;
+    }
+    const msg = netMessage(e, p);
+    view.fail(msg); sp && sp.cancel();
+    if(voice) toast(msg, 7000);
+    return null;
+  }
+}
+
+async function exchange(text, voice){
+  const myGen = ++gen; ctl = new AbortController(); setBusy(true);
+  const alive = () => myGen === gen;
+  addUser(text, voice);
+  transcript.push({who: 'user', kind: 'ask', text});
+  const named = Core.addressed(text);
+  const A = voice ? (named || other(lastFirst)) : 'claude', B = other(A);
+  if(voice) lastFirst = A;
+  const hooks = p => ({onSay: s => VoiceUI.saying(p, s), onError: e => toast('تعذّر النطق: ' + e.message)});
+  const pair = addBlock('pair');
+  let spA = null, spB = null;
+  if(voice){ VoiceUI.thinking(); spA = Speech.speaker(A, Promise.resolve(), alive, hooks(A)); spB = Speech.speaker(B, spA.done, alive, hooks(B)); }
+  const [ra, rb] = await Promise.all([generate(A, 'answer', 0, pair, voice, myGen, spA), generate(B, 'answer', 0, pair, voice, myGen, spB)]);
+  let last = spB ? spB.done : Promise.resolve();
+  const rounds = +$('rounds').value || 0;
+  for(let r = 1; r <= rounds && alive() && ra && rb; r++){
+    const sep = addSep(r === 1 ? 'تعقيب متبادل' : 'نقاش');
+    const notes = addBlock('pair');
+    let s1 = null, s2 = null;
+    if(voice){ s1 = Speech.speaker(A, last, alive, hooks(A)); s2 = Speech.speaker(B, s1.done, alive, hooks(B)); }
+    const [n1, n2] = await Promise.all([generate(A, 'note', r, notes, voice, myGen, s1), generate(B, 'note', r, notes, voice, myGen, s2)]);
+    if(voice) last = s2.done;
+    if(!n1 && !n2){ if(!notes.children.length){ notes.remove(); sep.remove(); } break; }
+    if(!notes.children.length){ notes.remove(); sep.remove(); }
+  }
+  saveChat();
+  if(alive()) await last;
+  if(alive()) setBusy(false);
+  return alive();
+}
+
+/* stop everything in flight; keep what was already said, mark the rest as interrupted */
+function interrupt(){
+  gen++;
+  if(ctl) ctl.abort();
+  Speech.stopAll(); Ear.cancel();
+  transcript = transcript.filter(e => {
+    if(!e.sp || e.sp.complete) return true;
+    const said = (e.sp.spoken + e.sp.current).trim();
+    e.sp.complete = true;
+    if(said){ e.text = said + ' … (قاطعه المستخدم)'; e.view.cut(said + ' …'); return true; }
+    e.view.drop(); return false;
+  });
+  setTimeout(tidy, 0); setTimeout(tidy, 300);
+  setTimeout(saveChat, 350);
+  setBusy(false);
+}
+/* remove separators and rows left empty after cards were dropped */
+function tidy(){
+  inner.querySelectorAll('.pair').forEach(p => {
+    if(p.children.length) return;
+    const prev = p.previousElementSibling;
+    if(prev && prev.classList.contains('sep')) prev.remove();
+    p.remove();
+  });
+}
+
+/* ---------- composer ---------- */
+const input = $('input');
+function autosize(){ input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 180) + 'px'; }
+function setBusy(b){ busy = b; refresh(); }
+function refresh(){
+  const has = !!input.value.trim();
+  $('stopBtn').hidden = !busy || voiceOn;
+  $('sendBtn').hidden = busy || !has;
+  $('voiceBtn').hidden = busy || has;
+}
+function hint(t, live){ $('hint').textContent = t || ''; $('hint').classList.toggle('live', !!live); }
+input.addEventListener('input', () => { autosize(); refresh(); });
+input.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey && !e.isComposing && matchMedia('(pointer:fine)').matches){ e.preventDefault(); send(); }
+});
+async function send(){
+  const t = input.value.trim();
+  if(!t || busy) return;
+  if(!hasKeys()){ openSettings(true); return; }
+  if(dictating) Ear.cancel();
+  input.value = ''; autosize(); refresh();
+  await exchange(t, false);
+}
+$('sendBtn').onclick = send;
+$('stopBtn').onclick = () => interrupt();
+document.querySelectorAll('.sug').forEach(b => b.onclick = () => { input.value = b.textContent; autosize(); refresh(); send(); });
+$('newBtn').onclick = () => {
+  interrupt(); transcript = []; store.set('chat', null);
+  inner.querySelectorAll(':scope > :not(#welcome)').forEach(n => n.remove());
+  $('welcome').hidden = false; input.focus();
+};
+
+/* dictation: speak into the text box */
+let dictating = false;
+$('dictBtn').onclick = async () => {
+  if(dictating){ Ear.finish(); return; }
+  Speech.stopAll();
+  dictating = true; $('dictBtn').classList.add('on'); hint('🎙 أسمعك… اضغط الميكروفون عند الانتهاء', true);
+  const base = input.value.trim() ? input.value.trim() + ' ' : '';
+  try{
+    const t = await Ear.once({onInterim: s => { input.value = base + s; autosize(); }, alive: () => dictating});
+    if(t){ input.value = base + t; autosize(); }
+    hint(t ? '' : 'لم أسمع شيئاً');
+  }catch(e){ hint(e.message); }
+  dictating = false; $('dictBtn').classList.remove('on'); refresh(); input.focus();
+  setTimeout(() => { if(!dictating) hint(''); }, 3000);
+};
+
+/* ---------- voice conversation ---------- */
+const VoiceUI = (() => {
+  const orb = {claude: $('orbC'), gpt: $('orbG')};
+  let state = 'idle', bargeIv = 0;
+  function set(s, who, cap){
+    state = s;
+    orb.claude.className = 'orb claude' + (s === 'speak' && who === 'claude' ? ' on' : s === 'think' ? ' think' : '');
+    orb.gpt.className = 'orb gpt' + (s === 'speak' && who === 'gpt' ? ' on' : s === 'think' ? ' think' : '');
+    $('you').classList.toggle('on', s === 'listen');
+    $('vwho').textContent = s === 'listen' ? 'أسمعك…' : s === 'think' ? 'يفكّران…' : s === 'speak' ? `${NAME[who]} يتحدث` : '';
+    if(cap !== undefined) $('vcap').textContent = cap;
+    $('vAct').textContent = s === 'listen' ? 'انتهيت' : (s === 'think' || s === 'speak') ? '✋ قاطِع' : '🎙 تكلّم';
+  }
+  const thinking = () => { if(voiceOn) set('think', null, ''); };
+  const saying = (p, s) => { if(voiceOn) set('speak', p, s); };
+  async function loop(){
+    while(voiceOn){
+      const g = gen;
+      set('listen', null, '');
+      let t = '';
+      try{
+        for(let i = 0; i < 2 && !t && voiceOn && g === gen; i++)
+          t = await Ear.once({onInterim: s => { $('vcap').textContent = s; }, onLevel: l => $('you').style.setProperty('--lvl', l), alive: () => voiceOn && g === gen});
+      }catch(e){ set('idle', null, e.message); return; }
+      if(!voiceOn || g !== gen) return;
+      if(!t){ set('idle', null, 'ما سمعتك. اضغط «تكلّم» عندما تكون جاهزاً.'); return; }
+      $('vcap').textContent = t;
+      const finished = await exchange(t, true);
+      if(!finished) return;
+    }
+  }
+  async function open(){
+    if(!hasKeys()){ openSettings(true); return; }
+    if(busy) interrupt();
+    Speech.unlock();
+    voiceOn = true; $('voice').hidden = false; refresh();
+    $('vRounds').textContent = (+$('rounds').value ? 'مع تعقيب متبادل' : 'بدون تعقيب');
+    if($('autoBarge').checked) await Ear.openMic();
+    clearInterval(bargeIv); let loud = 0;
+    bargeIv = setInterval(() => {
+      if(!voiceOn || !$('autoBarge').checked || (state !== 'speak' && state !== 'think')){ loud = 0; return; }
+      loud = Ear.level() > 0.08 ? loud + 1 : 0;
+      if(loud >= 5){ loud = 0; interrupt(); loop(); }
+    }, 60);
+    loop();
+  }
+  function close(){
+    voiceOn = false; clearInterval(bargeIv);
+    interrupt(); Ear.closeMic();
+    $('voice').hidden = true; set('idle', null, ''); refresh();
+  }
+  $('vAct').onclick = () => {
+    if(state === 'listen') Ear.finish();
+    else if(state === 'think' || state === 'speak'){ interrupt(); loop(); }
+    else loop();
+  };
+  $('vEnd').onclick = close;
+  addEventListener('keydown', e => { if(e.key === 'Escape' && voiceOn) close(); });
+  return {open, close, thinking, saying};
+})();
+$('voiceBtn').onclick = () => VoiceUI.open();
+
+/* ---------- saved conversation ---------- */
+function saveChat(){
+  const keep = transcript.slice(-80).map(e => ({who: e.who, kind: e.kind, text: e.text}));
+  store.set('chat', keep.length ? JSON.stringify(keep) : null);
+}
+function restoreChat(){
+  let saved = [];
+  try{ saved = JSON.parse(store.get('chat') || '[]'); }catch(e){ saved = []; }
+  if(!Array.isArray(saved) || !saved.length) return;
+  let group = null, type = '';
+  for(const e of saved){
+    if(!e || typeof e.text !== 'string') continue;
+    if(e.who === 'user'){ addUser(e.text, false); transcript.push({who: 'user', kind: 'ask', text: e.text}); type = 'user'; continue; }
+    if(e.who !== 'claude' && e.who !== 'gpt') continue;
+    const kind = e.kind === 'note' ? 'note' : 'answer';
+    if(type !== kind){ if(kind === 'note') addSep('تعقيب متبادل'); group = addBlock('pair'); type = kind; }
+    const view = addCard(group, e.who, kind);
+    view.update(e.text); view.done('');
+    transcript.push({who: e.who, kind, text: e.text, view});
+  }
+  stick = true; requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
+}
+restoreChat();
+
+refresh();
+if(!hasKeys()) setTimeout(() => openSettings(true), 300);
+window.__axon = {get transcript(){ return transcript; }, interrupt, exchange};
+})();
+</script>
+</body>
+</html>
