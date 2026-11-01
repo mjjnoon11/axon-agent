@@ -233,7 +233,7 @@ header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-betwe
     </div>
     <h4>الصوت</h4>
     <div class="g2">
-      <label>الاستماع لكلامك <select id="sttEngine"><option value="browser">المتصفح · مجاني</option><option value="openai">OpenAI · أدق للهجة</option></select></label>
+      <label>الاستماع لكلامك <select id="sttEngine"><option value="auto" selected>تلقائي (OpenAI إن وُجد مفتاحه)</option><option value="openai">OpenAI · أدق للهجة</option><option value="browser">المتصفح · مجاني</option></select></label>
       <label>نطق الإجابات <select id="ttsEngine"><option value="browser">المتصفح · مجاني</option><option value="openai">OpenAI · صوت طبيعي</option></select></label>
       <label>صوت Claude <select id="voiceC" class="ltr"><option>onyx</option><option>ash</option><option>echo</option><option>sage</option><option>fable</option><option>alloy</option><option>coral</option><option>nova</option><option>shimmer</option></select></label>
       <label>صوت ChatGPT <select id="voiceG" class="ltr"><option>nova</option><option>shimmer</option><option>coral</option><option>alloy</option><option>sage</option><option>onyx</option><option>ash</option><option>echo</option><option>fable</option></select></label>
@@ -661,29 +661,65 @@ const Speech = (() => {
 
 /* ---------- speech input ---------- */
 const Ear = (() => {
-  let rec = null, media = null, mic = null;
-  async function openMic(){
-    if(mic) return mic;
-    if(!navigator.mediaDevices) return null;
+  let rec = null, media = null, mic = null, ctx = null, forced = false;
+  /* iPhone starts an audio context suspended unless it is created or resumed inside a tap,
+     so every mic button calls prime() first, before anything is awaited */
+  function prime(){
     try{
-      const stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
-      const AC = window.AudioContext || window.webkitAudioContext, ac = new AC(), an = ac.createAnalyser();
-      an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
-      const buf = new Uint8Array(an.fftSize);
-      mic = {stream, ac, level(){ an.getByteTimeDomainData(buf); let s = 0; for(let i = 0; i < buf.length; i++){ const d = (buf[i] - 128) / 128; s += d * d; } return Math.sqrt(s / buf.length); }};
-      return mic;
-    }catch(e){ return null; }
+      if(!ctx){ const AC = window.AudioContext || window.webkitAudioContext; if(AC) ctx = new AC(); }
+      if(ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+    }catch(e){}
   }
-  function closeMic(){ if(mic){ mic.stream.getTracks().forEach(t => t.stop()); mic.ac.close().catch(() => {}); mic = null; } }
-  const level = () => mic ? mic.level() : 0;
+  const engine = () => {
+    const v = $('sttEngine').value, hasKey = !!$('keyG').value.trim();
+    if(v === 'openai') return hasKey ? 'openai' : (SR ? 'browser' : 'none');
+    if(v === 'browser') return SR ? 'browser' : (hasKey ? 'openai' : 'none');
+    return hasKey ? 'openai' : (SR ? 'browser' : 'none');           // auto
+  };
+  function micError(e){
+    const n = e && e.name;
+    if(n === 'NotAllowedError' || n === 'SecurityError')
+      return 'الميكروفون غير مسموح لهذا الموقع. في Safari: اضغط «aA» في شريط العنوان ← إعدادات الموقع ← الميكروفون ← سماح، ثم أعد تحميل الصفحة.';
+    if(n === 'NotFoundError' || n === 'OverconstrainedError') return 'لم أجد ميكروفوناً متصلاً بالجهاز.';
+    if(n === 'NotReadableError') return 'الميكروفون مستخدم الآن في تطبيق آخر (مكالمة أو تسجيل). أغلقه ثم حاول.';
+    return 'تعذّر تشغيل الميكروفون: ' + ((e && e.message) || n || 'خطأ غير معروف');
+  }
+  async function openMic(){
+    if(mic && mic.stream.getAudioTracks().some(t => t.readyState === 'live')) return mic;
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('هذا المتصفح لا يسمح بالميكروفون. افتح الموقع في Safari أو Chrome.');
+    let stream;
+    try{ stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}}); }
+    catch(e){ throw new Error(micError(e)); }
+    prime();
+    let level = () => -1;                                            // -1 = level unknown
+    try{
+      if(ctx){
+        if(ctx.state !== 'running') await ctx.resume().catch(() => {});
+        const an = ctx.createAnalyser(); an.fftSize = 1024;
+        const src = ctx.createMediaStreamSource(stream); src.connect(an);
+        const buf = new Uint8Array(an.fftSize);
+        level = () => { if(ctx.state !== 'running') return -1; an.getByteTimeDomainData(buf); let s = 0; for(let i = 0; i < buf.length; i++){ const d = (buf[i] - 128) / 128; s += d * d; } return Math.sqrt(s / buf.length); };
+      }
+    }catch(e){}
+    mic = {stream, level};
+    return mic;
+  }
+  function closeMic(){ if(mic){ mic.stream.getTracks().forEach(t => t.stop()); mic = null; } }
+  const level = () => mic ? Math.max(0, mic.level()) : 0;
+
   /* listen to one utterance; resolves with text ('' if nothing / cancelled) */
-  async function once({onInterim, onLevel, alive}){
-    if($('sttEngine').value === 'openai' && $('keyG').value.trim()){
-      const m = await openMic();
-      if(!m) throw new Error('اسمح للمتصفح باستخدام الميكروفون.');
-      return recordOpenAI(m, onLevel, alive);
+  async function once({onInterim, onLevel, alive, onWorking}){
+    const eng = engine();
+    if(eng === 'none') throw new Error('هذا المتصفح لا يدعم التعرّف على الكلام. أضف مفتاح ChatGPT لاستخدام استماع OpenAI.');
+    if(eng === 'openai') return recordOpenAI(await openMic(), onLevel, alive, onWorking);
+    try{ return await browserOnce(onInterim, alive); }
+    catch(e){
+      /* Safari's built-in recognition often fails on iPhone; fall back to OpenAI when possible */
+      if($('keyG').value.trim() && alive()){ toast('استخدمت استماع OpenAI لأن استماع المتصفح لم يعمل.', 3500); return recordOpenAI(await openMic(), onLevel, alive, onWorking); }
+      throw e;
     }
-    if(!SR) throw new Error('هذا المتصفح لا يدعم التعرّف على الكلام. استخدم Chrome أو اختر OpenAI من الإعدادات.');
+  }
+  function browserOnce(onInterim, alive){
     return new Promise((res, rej) => {
       const r = new SR(); r.lang = 'ar-SA'; r.interimResults = true; r.continuous = false;
       let fin = '', fatal = null;
@@ -695,40 +731,55 @@ const Ear = (() => {
         onInterim && onInterim(fin + interim);
       };
       r.onerror = e => {
-        if(e.error === 'not-allowed' || e.error === 'service-not-allowed') fatal = 'اسمح للمتصفح باستخدام الميكروفون.';
-        else if(e.error === 'network') fatal = 'الاستماع في المتصفح يحتاج إنترنت. جرّب OpenAI من الإعدادات.';
+        if(e.error === 'not-allowed' || e.error === 'service-not-allowed') fatal = 'الميكروفون أو خدمة الإملاء غير مسموحة. في الآيفون: الإعدادات ← عام ← لوحة المفاتيح ← فعّل «الإملاء»، واسمح للموقع بالميكروفون.';
+        else if(e.error === 'network') fatal = 'الاستماع في المتصفح يحتاج إنترنت.';
+        else if(e.error === 'audio-capture') fatal = 'لم أستطع الوصول إلى الميكروفون.';
       };
       r.onend = () => { if(rec === r) rec = null; if(fatal) rej(new Error(fatal)); else res(alive() ? fin.trim() : ''); };
       rec = r;
-      try{ r.start(); }catch(e){ rec = null; res(''); }
+      try{ r.start(); }catch(e){ rec = null; rej(new Error('تعذّر بدء الاستماع في المتصفح.')); }
     });
   }
-  function recordOpenAI(m, onLevel, alive){
-    return new Promise(res => {
-      const mime = ['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || '';
-      let mr; try{ mr = new MediaRecorder(m.stream, mime ? {mimeType: mime} : undefined); }catch(e){ return res(''); }
+  function recordOpenAI(m, onLevel, alive, onWorking){
+    return new Promise((res, rej) => {
+      const mime = ['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) || '';
+      let mr;
+      try{ mr = new MediaRecorder(m.stream, mime ? {mimeType: mime} : undefined); }
+      catch(e){ return rej(new Error('المتصفح لا يدعم تسجيل الصوت.')); }
       const chunks = []; mr.ondataavailable = e => { if(e.data && e.data.size) chunks.push(e.data); };
-      let spoke = false, lastLoud = performance.now(); const t0 = performance.now();
+      forced = false;
+      const t0 = performance.now(), samples = [];
+      let spoke = false, lastLoud = t0, floor = 0.01, blind = false;
       const iv = setInterval(() => {
-        const l = m.level(), now = performance.now();
-        onLevel && onLevel(Math.min(1, l * 8));
-        if(l > 0.035){ spoke = true; lastLoud = now; }
-        if(!alive() || (spoke && now - lastLoud > 1500) || now - t0 > 60000 || (!spoke && now - t0 > 9000)){ clearInterval(iv); if(mr.state !== 'inactive') mr.stop(); }
+        const now = performance.now(), l = m.level();
+        if(l < 0){ blind = true; onLevel && onLevel(.5); }          // no level reading: rely on the user's "انتهيت" and a time limit
+        else{
+          onLevel && onLevel(Math.min(1, l * 10));
+          /* background level = quietest early reading, so speaking right away is not mistaken for noise */
+          if(now - t0 < 400){ samples.push(l); floor = Math.min(0.03, Math.max(0.004, Math.min(...samples))); }
+          if(l > Math.max(0.018, Math.min(floor * 2.5, 0.06))){ spoke = true; lastLoud = now; }
+        }
+        const silentAfterSpeech = !blind && spoke && now - lastLoud > 1400;
+        const nothingYet = !blind && !spoke && now - t0 > 12000;
+        if(!alive() || silentAfterSpeech || nothingYet || now - t0 > 60000){ clearInterval(iv); if(mr.state !== 'inactive') mr.stop(); }
       }, 60);
       mr.onstop = async () => {
         clearInterval(iv); media = null; onLevel && onLevel(0);
-        if(!alive() || !spoke || !chunks.length) return res('');
-        try{ res(await Core.stt({key: $('keyG').value.trim(), model: $('sttModel').value.trim(), blob: new Blob(chunks, {type: mr.mimeType || 'audio/webm'})})); }
-        catch(e){ toast(e.message); res(''); }
+        const heard = spoke || forced || blind;
+        if(!alive() && !forced) return res('');
+        if(!heard || !chunks.length) return res('');
+        onWorking && onWorking();
+        try{ res(await Core.stt({key: $('keyG').value.trim(), model: $('sttModel').value.trim(), blob: new Blob(chunks, {type: mr.mimeType || mime || 'audio/mp4'})})); }
+        catch(e){ rej(e); }
       };
       media = mr; mr.start(250);
     });
   }
   /* finish listening now: keep what was heard */
-  function finish(){ if(rec){ try{ rec.stop(); }catch(e){} } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
+  function finish(){ forced = true; if(rec){ try{ rec.stop(); }catch(e){} } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
   /* cancel listening: discard */
-  function cancel(){ if(rec){ try{ rec.abort ? rec.abort() : rec.stop(); }catch(e){} rec = null; } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
-  return {once, finish, cancel, openMic, closeMic, level};
+  function cancel(){ forced = false; if(rec){ try{ rec.abort ? rec.abort() : rec.stop(); }catch(e){} rec = null; } if(media && media.state !== 'inactive'){ try{ media.stop(); }catch(e){} } }
+  return {once, finish, cancel, openMic, closeMic, level, prime, engine};
 })();
 
 /* network failures surface as a bare TypeError; explain the likely cause */
@@ -873,16 +924,19 @@ $('newBtn').onclick = () => {
 /* dictation: speak into the text box */
 let dictating = false;
 $('dictBtn').onclick = async () => {
+  Ear.prime();
   if(dictating){ Ear.finish(); return; }
   Speech.stopAll();
   dictating = true; $('dictBtn').classList.add('on'); hint('🎙 أسمعك… اضغط الميكروفون عند الانتهاء', true);
   const base = input.value.trim() ? input.value.trim() + ' ' : '';
   try{
-    const t = await Ear.once({onInterim: s => { input.value = base + s; autosize(); }, alive: () => dictating});
+    const t = await Ear.once({onInterim: s => { input.value = base + s; autosize(); }, alive: () => dictating,
+      onWorking: () => hint('⏳ أحوّل كلامك إلى نص…', true)});
     if(t){ input.value = base + t; autosize(); }
-    hint(t ? '' : 'لم أسمع شيئاً');
-  }catch(e){ hint(e.message); }
+    hint(t ? '' : 'لم أسمع شيئاً، اضغط الميكروفون وتكلّم بصوت أوضح');
+  }catch(e){ hint('تعذّر الاستماع'); toast(e.message, 8000); }
   dictating = false; $('dictBtn').classList.remove('on'); refresh(); input.focus();
+  if(!voiceOn) Ear.closeMic();   // release the mic so the phone stops showing it in use
   setTimeout(() => { if(!dictating) hint(''); }, 3000);
 };
 
@@ -908,7 +962,8 @@ const VoiceUI = (() => {
       let t = '';
       try{
         for(let i = 0; i < 2 && !t && voiceOn && g === gen; i++)
-          t = await Ear.once({onInterim: s => { $('vcap').textContent = s; }, onLevel: l => $('you').style.setProperty('--lvl', l), alive: () => voiceOn && g === gen});
+          t = await Ear.once({onInterim: s => { $('vcap').textContent = s; }, onLevel: l => $('you').style.setProperty('--lvl', l), alive: () => voiceOn && g === gen,
+            onWorking: () => { $('vwho').textContent = 'أفهم كلامك…'; }});
       }catch(e){ set('idle', null, e.message); return; }
       if(!voiceOn || g !== gen) return;
       if(!t){ set('idle', null, 'ما سمعتك. اضغط «تكلّم» عندما تكون جاهزاً.'); return; }
@@ -918,12 +973,13 @@ const VoiceUI = (() => {
     }
   }
   async function open(){
+    Ear.prime();
     if(!hasKeys()){ openSettings(true); return; }
     if(busy) interrupt();
     Speech.unlock();
     voiceOn = true; $('voice').hidden = false; refresh();
     $('vRounds').textContent = (+$('rounds').value ? 'مع تعقيب متبادل' : 'بدون تعقيب');
-    if($('autoBarge').checked) await Ear.openMic();
+    if($('autoBarge').checked){ try{ await Ear.openMic(); }catch(e){ toast(e.message, 8000); } }
     clearInterval(bargeIv); let loud = 0;
     bargeIv = setInterval(() => {
       if(!voiceOn || !$('autoBarge').checked || (state !== 'speak' && state !== 'think')){ loud = 0; return; }
@@ -938,6 +994,7 @@ const VoiceUI = (() => {
     $('voice').hidden = true; set('idle', null, ''); refresh();
   }
   $('vAct').onclick = () => {
+    Ear.prime();
     if(state === 'listen') Ear.finish();
     else if(state === 'think' || state === 'speak'){ interrupt(); loop(); }
     else loop();
