@@ -221,7 +221,7 @@ header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-betwe
     </div>
     <p class="note">المفتاح من console.anthropic.com و platform.openai.com. يُرسل من جهازك إليهما مباشرة فقط.</p>
     <label class="chk"><input type="checkbox" id="remember"> احفظ المفاتيح في هذا المتصفح</label>
-    <p class="note warnfile" id="fileWarn" hidden>تنبيه: الصفحة مفتوحة كملف من جهازك. ChatGPT يرفض الاتصال من الملفات المحلية، فافتحها من رابطها المنشور حتى يعمل الاثنان.</p>
+    <p class="note warnfile" id="fileWarn" hidden>تنبيه: الصفحة مفتوحة بدون خادم AXON، وChatGPT يرفض الاتصال المباشر منها. افتحها من رابط Render حتى يعمل الاثنان.</p>
     <button class="testbtn" id="testBtn" type="button">فحص الاتصال</button>
     <div class="testres" id="testRes" aria-live="polite" hidden></div>
     <h4>طريقة التعاون</h4>
@@ -250,6 +250,9 @@ header{flex:0 0 auto;display:flex;align-items:center;justify-content:space-betwe
 <script>
 /* ===== Core: streaming, providers, speech helpers (pure, unit-tested) ===== */
 const Core = (() => {
+  /* API hosts; switched to the site's own relay when one is available */
+  const BASE = {openai: 'https://api.openai.com', anthropic: 'https://api.anthropic.com', relay: false};
+  function setBase(b){ Object.assign(BASE, b); }
   async function* sse(response){
     const reader = response.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -283,7 +286,7 @@ const Core = (() => {
   async function claude({key, model, system, messages, maxTokens, onText, signal, fetchImpl = fetch}){
     const body = {model, max_tokens: maxTokens, stream: true, messages};
     if(system) body.system = system;
-    const res = await fetchImpl('https://api.anthropic.com/v1/messages', {
+    const res = await fetchImpl(BASE.anthropic + '/v1/messages', {
       method:'POST', signal,
       headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
       body: JSON.stringify(body)
@@ -301,7 +304,7 @@ const Core = (() => {
   }
   async function gpt({key, model, system, messages, maxTokens, onText, signal, fetchImpl = fetch}){
     const msgs = system ? [{role:'system', content: system}, ...messages] : messages;
-    const res = await fetchImpl('https://api.openai.com/v1/chat/completions', {
+    const res = await fetchImpl(BASE.openai + '/v1/chat/completions', {
       method:'POST', signal,
       headers:{'content-type':'application/json','authorization':'Bearer ' + key},
       body: JSON.stringify({model, messages: msgs, stream: true, max_completion_tokens: maxTokens, stream_options:{include_usage:true}})
@@ -345,7 +348,7 @@ const Core = (() => {
     return out.filter(Boolean);
   }
   async function tts({key, model, voice, input, speed, fetchImpl = fetch}){
-    const res = await fetchImpl('https://api.openai.com/v1/audio/speech', {
+    const res = await fetchImpl(BASE.openai + '/v1/audio/speech', {
       method:'POST', headers:{'content-type':'application/json','authorization':'Bearer ' + key},
       body: JSON.stringify({model, voice, input, speed, response_format:'mp3'})
     });
@@ -358,7 +361,7 @@ const Core = (() => {
     fd.append('file', blob, 'speech.' + ext);
     fd.append('model', model);
     fd.append('language', 'ar');
-    const res = await fetchImpl('https://api.openai.com/v1/audio/transcriptions', {method:'POST', headers:{'authorization':'Bearer ' + key}, body: fd});
+    const res = await fetchImpl(BASE.openai + '/v1/audio/transcriptions', {method:'POST', headers:{'authorization':'Bearer ' + key}, body: fd});
     if(!res.ok) throw new Error(friendly('gpt', res.status, await readError(res)));
     const j = await res.json();
     return (j.text || '').trim();
@@ -377,15 +380,16 @@ const Core = (() => {
     if(!key) return {ok: false, msg: `${name}: لم يُضف المفتاح بعد.`};
     /* Anthropic's model list refuses browser requests; token counting is free and checks key + model together */
     const req = provider === 'claude'
-      ? ['https://api.anthropic.com/v1/messages/count_tokens', {method: 'POST',
+      ? [BASE.anthropic + '/v1/messages/count_tokens', {method: 'POST',
           headers: {'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true'},
           body: JSON.stringify({model, messages: [{role: 'user', content: 'مرحبا'}]})}]
-      : ['https://api.openai.com/v1/models', {headers: {'authorization': 'Bearer ' + key}}];
+      : [BASE.openai + '/v1/models', {headers: {'authorization': 'Bearer ' + key}}];
     let res;
     try{ res = await fetchImpl(...req); }
     catch(e){
       if(/headers|ISO-8859|code point/i.test(String(e && e.message))) return {ok: false, msg: `${name}: المفتاح يحتوي رموزاً غير صالحة. احذفه والصقه من جديد.`};
-      return {ok: false, msg: `${name}: تعذّر الاتصال بالخادم. افتح الصفحة في Safari أو Chrome وتأكد من الإنترنت.`};
+      if(provider === 'gpt' && !BASE.relay) return {ok: false, msg: `${name}: يرفض الاتصال المباشر من هذه الصفحة. افتح AXON AGENT من رابط Render حتى يعمل.`};
+      return {ok: false, msg: `${name}: تعذّر الاتصال بالخادم. تأكد من الإنترنت ثم أعد المحاولة.`};
     }
     if(!res.ok){
       const em = await readError(res);
@@ -402,7 +406,7 @@ const Core = (() => {
     }
     return {ok: true, msg: `${name}: المفتاح يعمل ✓ والنموذج «${model}» متاح.`};
   }
-  return {sse, claude, gpt, friendly, speechText, chunk, tts, stt, addressed, NOCOMMENT, check};
+  return {sse, claude, gpt, friendly, speechText, chunk, tts, stt, addressed, NOCOMMENT, check, setBase, BASE};
 })();
 if(typeof module !== 'undefined') module.exports = Core;
 
@@ -440,11 +444,29 @@ $('gearBtn').onclick = () => openSettings(false);
 $('closeSet').onclick = $('saveSet').onclick = closeSettings;
 $('settings').addEventListener('click', e => { if(e.target === $('settings')) closeSettings(); });
 addEventListener('keydown', e => { if(e.key === 'Escape' && !$('settings').hidden) closeSettings(); });
+/* when served by the AXON server, route API calls through its relay */
+const relayReady = (async () => {
+  if(location.protocol !== 'http:' && location.protocol !== 'https:') return false;
+  try{
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 5000);
+    const r = await fetch(new URL('api/health', location.href), {cache: 'no-store', signal: c.signal});
+    clearTimeout(t);
+    const j = r.ok ? await r.json() : null;
+    if(j && j.relay){
+      const base = new URL('api/', location.href).href;
+      Core.setBase({openai: base + 'openai', anthropic: base + 'anthropic', relay: true});
+      return true;
+    }
+  }catch(e){}
+  return false;
+})();
 const localFile = location.protocol === 'file:' || location.origin === 'null';
-$('fileWarn').hidden = !localFile;
+$('fileWarn').hidden = true;
+relayReady.then(ok => { $('fileWarn').hidden = ok; });
 $('testBtn').onclick = async () => {
   const b = $('testBtn'), box = $('testRes');
   b.disabled = true; b.textContent = 'جارٍ الفحص…'; box.hidden = false; box.innerHTML = '';
+  await relayReady;
   const res = await Promise.all([
     Core.check('claude', $('keyC').value.trim(), $('modelC').value.trim()),
     Core.check('gpt', $('keyG').value.trim(), $('modelG').value.trim())
@@ -714,8 +736,8 @@ function netMessage(e, p){
   const m = String(e && e.message || e);
   if(e instanceof TypeError || /failed to fetch|load failed|networkerror|network request failed/i.test(m)){
     const embedded = window.top !== window.self;
-    if(p === 'gpt' && (location.protocol === 'file:' || location.origin === 'null'))
-      return 'ChatGPT: يرفض الاتصال من ملف مفتوح على الجهاز. افتح AXON AGENT من رابطه المنشور.';
+    if(p === 'gpt' && !Core.BASE.relay)
+      return 'ChatGPT: يرفض الاتصال المباشر من هذه الصفحة. افتح AXON AGENT من رابط Render حتى يعمل.';
     return `${NAME[p]}: تعذّر الاتصال بالخادم.\n` + (embedded
       ? 'يبدو أن الملف مفتوح داخل معاينة تطبيق تمنع الاتصال. افتحه مباشرة في Safari أو Chrome.'
       : 'تأكد من الإنترنت. إذا كان الملف مفتوحاً داخل معاينة تطبيق (مثل تطبيق الملفات أو Claude) فافتحه في Safari أو Chrome.');
@@ -759,6 +781,7 @@ async function generate(p, kind, round, parent, voice, myGen, sp){
 }
 
 async function exchange(text, voice){
+  await relayReady;
   const myGen = ++gen; ctl = new AbortController(); setBusy(true);
   const alive = () => myGen === gen;
   addUser(text, voice);
